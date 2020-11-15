@@ -1,2 +1,5 @@
 .idea
 venv
+results
+.pytest_cache
+CelebA
