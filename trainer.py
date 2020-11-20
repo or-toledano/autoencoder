@@ -81,6 +81,7 @@ class VAE(nn.Module):
 class Trainer:
     def __init__(self, device):
         self.device = device
+        self.data = CelebLoader()
         model = VAE().to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
@@ -99,7 +100,7 @@ class Trainer:
     def train(self, epoch):
         model.train()
         train_loss = 0
-        for batch_idx, (data, _) in enumerate(train_loader):
+        for batch_idx, (data, _) in enumerate(self.data.train):
             data = data.to(device)
             optimizer.zero_grad()
             recon_batch, mu, logvar = model(data)
@@ -157,7 +158,6 @@ def main():
     kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
     trainer = Trainer(device)
-
 
     for epoch in range(1, args.epochs + 1):
         trainer.train(epoch)
