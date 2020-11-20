@@ -169,7 +169,7 @@ class Trainer:
                 if i == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
-                                            recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
+                                            recon_batch.view(self.batch_size, 1, 64, 64)[:n]])
                     save_image(comparison.cpu(),
                                'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 

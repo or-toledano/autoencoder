@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 from torch.utils.data.sampler import SubsetRandomSampler
 
 from torchvision import datasets, transforms
+from torchvision.datasets import CelebA
 
-latent_dim = 256
+latent_dim = 128
 
 PRINT_ITER = 10
 TEST_RATIO = .05
@@ -22,14 +23,14 @@ IMG_FOLDER = 'CelebA'
 
 
 def load_split_train_test(batch_size, cpu) -> Tuple[DataLoader, DataLoader]:
-    train_transforms = transforms.Compose([transforms.Resize((128, 128)),
+    train_transforms = transforms.Compose([transforms.Resize((64, 64)),
                                            transforms.ToTensor(),
                                            ])
-    test_transforms = transforms.Compose([transforms.Resize((128, 128)), transforms.ToTensor()])
+    test_transforms = transforms.Compose([transforms.Resize((64, 64)), transforms.ToTensor()])
     train_data = datasets.ImageFolder(IMG_FOLDER, transform=train_transforms)
     test_data = datasets.ImageFolder(IMG_FOLDER, transform=test_transforms)
     num_train = len(train_data)
-    indices = list(range(num_train))
+    indices = list(range(num_train))[:5000]
     split = int(np.floor(TEST_RATIO * num_train))
     np.random.shuffle(indices)
     train_idx, test_idx = indices[split:], indices[:split]
@@ -43,6 +44,16 @@ def load_split_train_test(batch_size, cpu) -> Tuple[DataLoader, DataLoader]:
     return train_loader, test_loader
 
 
+def internet():
+    sample_dataloader = DataLoader(CelebA(root='CelebA',
+                                          split="test",
+                                          transform=transform,
+                                          download=False),
+                                   batch_size=144,
+                                   shuffle=True,
+                                   drop_last=True)
+
+
 class AutoEncoder(nn.Module):
     def __init__(self) -> None:
         super(AutoEncoder, self).__init__()
@@ -50,7 +61,7 @@ class AutoEncoder(nn.Module):
         self.latent_dim = latent_dim  # TODO
 
         modules = []
-        hidden_dims = [13, 843, 323, 7, 13]
+        hidden_dims = [32, 64, 128, 256, 512]
 
         in_channels = 3
         for h_dim in hidden_dims:
@@ -234,17 +245,19 @@ class Trainer:
         plt.ylabel('Loss')
         plt.show()
 
-    # Reconstruction + KL divergence losses summed over all elements and batch
-    def loss_function(self, recon_x, x, mu, logvar):
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+    @staticmethod
+    def loss_function(recons, input, mu, log_var) -> dict:
+        """
+        Computes the VAE loss function.
+        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
+        :param args:
+        :param kwargs:
+        :return:
+        """
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return BCE + KLD
+        recons_loss = F.mse_loss(recons, input)
+        loss = recons_loss.mean()
+        return loss
 
     @staticmethod
     def loss_function_l1(recon_x, x):
@@ -262,7 +275,7 @@ class Trainer:
         for batch_idx, data in enumerate(self.train_loader):
             data = data[0].to(self.device)
             self.optimizer.zero_grad()
-            recon_batch, mu, logvar = self.model(data)
+            recon_batch, _, mu, logvar = self.model(data)
             loss = self.loss_function(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
@@ -284,12 +297,12 @@ class Trainer:
         with torch.no_grad():
             for i, data in enumerate(self.test_loader):
                 data = data[0].to(self.device)
-                recon_batch, mu, logvar = self.model(data)
+                recon_batch, _, mu, logvar = self.model(data)
                 test_loss += self.loss_function(recon_batch, data, mu, logvar).item()
                 if i == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
-                                            recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
+                                            recon_batch.view(self.batch_size, 3, 64, 64)[:n]])
                     save_image(comparison.cpu(),
                                'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
@@ -304,8 +317,8 @@ def run_trainer(trainer):
         trainer.test_epoch(epoch)
         with torch.no_grad():
             sam = trainer.model.sample(64, trainer.device).cpu()
-            save_image(sam.view(64, 3, 128, 128),
-                       'results/sample_' + str(epoch) + '.png')
+            save_image(sam.view(64, 3, 64, 64),
+                       'results/sample_' + str(epoch) + '.png')  # TODO  the first 64 is the no. of visuallizations
 
     trainer.plot_train_losses()
 
@@ -319,7 +332,7 @@ def main():
     device = torch.device("cpu" if args.cpu else "cuda")
     torch.manual_seed(42)
 
-    trainer = Trainer(device, epochs=3, batch_size=100, cpu=args.cpu)
+    trainer = Trainer(device, epochs=1, batch_size=121, cpu=args.cpu)
     run_trainer(trainer)
 
 
