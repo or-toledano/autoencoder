@@ -4,16 +4,17 @@ import torch
 import torch.utils.data
 from torch import nn, optim
 from torch.nn import functional as F
+from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 import numpy as np
 import glob
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import matplotlib
 import matplotlib.pyplot as plt
+from torch.utils.data.sampler import SubsetRandomSampler
 
 from torchvision import datasets, transforms
-
 
 # train_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=True, download=True,
@@ -24,70 +25,30 @@ from torchvision import datasets, transforms
 #     batch_size=args.batch_size, shuffle=True, **kwargs)
 
 PRINT_ITER = 10
+TEST_RATIO = .05
+IMG_FOLDER = 'CelebA'
 
 
-class CelebLoader:
-
-    @staticmethod
-    def to_tensor(img: str):
-        pass
-
-    def __init__(self, cpu):
-        self.cpu = cpu
-        dataset = datasets.ImageFolder('CelebA')
-        celebs = glob.iglob("CelebA/*.jpg")
-        self.celebs = np.fromiter(celebs, dtype='U18')
-        self.train: Optional[List[str]] = None
-        self.test: Optional[List[str]] = None
-
-    def partition_train_test(self, batch_size, dataset):
-        """
-        :return: after this is invoked, train and test should be shuffled and partitioned
-        """
-        # np.random.shuffle(self.celebs)
-        # train_start_idx = int(0.05 * len(self.celebs))
-        # self.train = self.celebs[train_start_idx:]
-        # self.test = self.celebs[:train_start_idx]
-
-        transform = transforms.Compose([transforms.Resize(128), transforms.ToTensor()])
-        dataset = datasets.ImageFolder(dataset, transform=transform)
-        data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                                                  num_workers=not self.cpu,
-                                                  pin_memory=not self.cpu)
-        images, labels = next(iter(data_loader))
-
-
-    def load_split_train_test(self,batch_size,dataset, valid_size=.05):
-        train_transforms = transforms.Compose([transforms.Resize(128),
-                                               transforms.ToTensor(),
-                                               ])
-        test_transforms = transforms.Compose([transforms.Resize(128),
-                                              transforms.ToTensor(),
-                                              ])
-        train_data = datasets.ImageFolder(dataset,
-                                          transform=train_transforms)
-        test_data = datasets.ImageFolder(dataset,
-                                         transform=test_transforms)
-        num_train = len(train_data)
-        indices = list(range(num_train))
-        split = int(np.floor(valid_size * num_train))
-        np.random.shuffle(indices)
-        from torch.utils.data.sampler import SubsetRandomSampler
-        train_idx, test_idx = indices[split:], indices[:split]
-        train_sampler = SubsetRandomSampler(train_idx)
-        test_sampler = SubsetRandomSampler(test_idx)
-        trainloader = torch.utils.data.DataLoader(train_data,
-                                                  sampler=train_sampler, batch_size=batch_size)
-        testloader = torch.utils.data.DataLoader(test_data,
-                                                 sampler=test_sampler, batch_size=batch_size)
-        return trainloader, testloader
-
-
-    def train_iter(self):
-        return (self.to_tensor(img) for img in self.train)
-
-    def test_iter(self):
-        return (self.to_tensor(img) for img in self.test)
+def load_split_train_test(batch_size, cpu) -> Tuple[DataLoader, DataLoader]:
+    train_transforms = transforms.Compose([transforms.Resize(128),
+                                           transforms.ToTensor(),
+                                           ])
+    test_transforms = transforms.Compose([transforms.Resize(128), transforms.ToTensor()])
+    train_data = datasets.ImageFolder(IMG_FOLDER, transform=train_transforms)
+    test_data = datasets.ImageFolder(IMG_FOLDER, transform=test_transforms)
+    num_train = len(train_data)
+    indices = list(range(num_train))
+    split = int(np.floor(TEST_RATIO * num_train))
+    np.random.shuffle(indices)
+    train_idx, test_idx = indices[split:], indices[:split]
+    train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
+    train_loader = torch.utils.data.DataLoader(train_data,
+                                               sampler=train_sampler, batch_size=batch_size, num_workers=not cpu,
+                                               pin_memory=not cpu)
+    test_loader = torch.utils.data.DataLoader(test_data,
+                                              sampler=test_sampler, batch_size=batch_size, num_workers=not cpu,
+                                              pin_memory=not cpu)
+    return train_loader, test_loader
 
 
 class VAE(nn.Module):
@@ -115,7 +76,7 @@ class VAE(nn.Module):
         return torch.sigmoid(self.fc4(h3))
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 784))
+        mu, logvar = self.encode(x.view(-1, 3*16384))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
@@ -126,7 +87,7 @@ class Trainer:
         self.epochs = epochs
         self.batch_size = batch_size
         self.cpu = cpu
-        self.data = CelebLoader()
+        self.train_loader, self.test_loader = load_split_train_test(batch_size, cpu)
         self.losses: List[float] = list()
         self.model = VAE().to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
@@ -165,21 +126,21 @@ class Trainer:
 
         return BCE + KLD
 
-    def loss_function_L1(self, recon_x, x):
-        L1_loss = nn.L1Loss()
-        return L1_loss(recon_x, x)
+    @staticmethod
+    def loss_function_l1(recon_x, x):
+        l1_loss = nn.L1Loss()
+        return l1_loss(recon_x, x)
 
-
-    def loss_function_L2(self, recon_x, x):
-        L2_loss = nn.MSELoss()
-        return L2_loss(recon_x, x)
-
+    @staticmethod
+    def loss_function_l2(recon_x, x):
+        l2_loss = nn.MSELoss()
+        return l2_loss(recon_x, x)
 
     def train(self, epoch):
         self.model.train()
         train_loss = 0
-        for batch_idx, (data, _) in enumerate(self.data.train):
-            data = data.to(self.device)
+        for batch_idx, data in enumerate(self.train_loader):
+            data = data[0].to(self.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
             loss = self.loss_function(recon_batch, data, mu, logvar)
@@ -192,7 +153,7 @@ class Trainer:
                            100. * batch_idx / len(self.data.train),
                            loss.item() / len(data)))
 
-        train_loss /= len(self.data.train.dataset)
+        train_loss /= len(self.train_loader.dataset)
         self.train_losses.append(train_loss)
         print('====> Epoch: {} Average loss: {:.4f}'.format(
             epoch, train_loss))
@@ -201,8 +162,8 @@ class Trainer:
         self.model.eval()
         test_loss = 0
         with torch.no_grad():
-            for i, (data, _) in enumerate(self.data.test):
-                data = data.to(self.device)
+            for i, data in enumerate(self.test_loader):
+                data = data[0].to(self.device)
                 recon_batch, mu, logvar = self.model(data)
                 test_loss += self.loss_function(recon_batch, data, mu, logvar).item()
                 if i == 0:
@@ -217,35 +178,31 @@ class Trainer:
         print('====> Test set loss: {:.4f}'.format(test_loss))
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch-size', type=int, default=128,
-                        help='batch size for training')
-    parser.add_argument('--epochs', type=int, default=10,
-                        help='epochs for training')
-    parser.add_argument('--cpu', action='store_true', default=False,
-                        help='force CPU usage')
-    parser.add_argument('--seed', type=int, default=42, metavar='S',
-                        help='random seed')
-
-    args = parser.parse_args()
-    args.cpu = args.cpu or not torch.cuda.is_available()
-    torch.manual_seed(args.seed)
-
-    device = torch.device("cpu" if args.cpu else "cuda")
-
-    trainer = Trainer(device, args.epochs, args.batch_size, args.cpu)
-
-    for epoch in range(1, args.epochs + 1):
+def run_trainer(trainer):
+    for epoch in range(0, trainer.epochs):
         trainer.train(epoch)
         trainer.test_epoch(epoch)
         with torch.no_grad():
-            sample = torch.randn(64, 20).to(device)
+            sample = torch.randn(64, 20).to(trainer.device)
             sample = trainer.model.decode(sample).cpu()
             save_image(sample.view(64, 1, 28, 28),
                        'results/sample_' + str(epoch) + '.png')
 
     trainer.plot_train_losses()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cpu', action='store_true', default=False,
+                        help='force CPU usage')
+    parser.add_argument('--seed', type=int, default=42, help='random seed')
+    args = parser.parse_args()
+    args.cpu = args.cpu or not torch.cuda.is_available()
+    torch.manual_seed(args.seed)
+    device = torch.device("cpu" if args.cpu else "cuda")
+
+    trainer = Trainer(device, epochs=10, batch_size=100, cpu=args.cpu)
+    run_trainer(trainer)
 
 
 if __name__ == "__main__":
