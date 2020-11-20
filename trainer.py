@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 
 from torchvision import datasets, transforms
 
-
 # train_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=True, download=True,
 #                    transform=transforms.ToTensor()),
@@ -32,27 +31,29 @@ class CelebLoader:
     def to_tensor(img: str):
         pass
 
-    def __init__(self):
+    def __init__(self, cpu):
+        self.cpu = cpu
         dataset = datasets.ImageFolder('CelebA')
         celebs = glob.iglob("CelebA/*.jpg")
         self.celebs = np.fromiter(celebs, dtype='U18')
         self.train: Optional[List[str]] = None
         self.test: Optional[List[str]] = None
 
-    def partition_train_test(self,batch_size,dataset):
+    def partition_train_test(self, batch_size, dataset):
         """
         :return: after this is invoked, train and test should be shuffled and partitioned
         """
-        #np.random.shuffle(self.celebs)
-        #train_start_idx = int(0.05 * len(self.celebs))
-        #self.train = self.celebs[train_start_idx:]
-        #self.test = self.celebs[:train_start_idx]
+        # np.random.shuffle(self.celebs)
+        # train_start_idx = int(0.05 * len(self.celebs))
+        # self.train = self.celebs[train_start_idx:]
+        # self.test = self.celebs[:train_start_idx]
 
-        self.transform = transforms.Compose([transforms.Resize(128),
-                                        transforms.ToTensor()])
-        dataset = datasets.ImageFolder(dataset, transform= self.transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-        images, labels = next(iter(dataloader))
+        transform = transforms.Compose([transforms.Resize(128), transforms.ToTensor()])
+        dataset = datasets.ImageFolder(dataset, transform=transform)
+        data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                                                  num_workers=not self.cpu,
+                                                  pin_memory=not self.cpu)
+        images, labels = next(iter(data_loader))
 
     def train_iter(self):
         return (self.to_tensor(img) for img in self.train)
@@ -62,6 +63,12 @@ class CelebLoader:
 
 
 class VAE(nn.Module):
+    @staticmethod
+    def reparameterize(mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
     def __init__(self):
         super(VAE, self).__init__()
 
@@ -75,11 +82,6 @@ class VAE(nn.Module):
         h1 = F.relu(self.fc1(x))
         return self.fc21(h1), self.fc22(h1)
 
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
     def decode(self, z):
         h3 = F.relu(self.fc3(z))
         return torch.sigmoid(self.fc4(h3))
@@ -91,16 +93,17 @@ class VAE(nn.Module):
 
 
 class Trainer:
-    def __init__(self, device, epochs, batch_size):
+    def __init__(self, device, epochs, batch_size, cpu: bool):
         self.device = device
         self.epochs = epochs
         self.batch_size = batch_size
+        self.cpu = cpu
         self.data = CelebLoader()
         self.losses: List[float] = list()
         self.model = VAE().to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-    def plot_losss(self):
+    def plot_losses(self):
         """
         do something with self.losses
         :return:
@@ -163,7 +166,7 @@ class Trainer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='VAE MNIST Example')
+    parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', type=int, default=128,
                         help='batch size for training')
     parser.add_argument('--epochs', type=int, default=10,
@@ -172,18 +175,14 @@ def main():
                         help='force CPU usage')
     parser.add_argument('--seed', type=int, default=42, metavar='S',
                         help='random seed')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
+
     args = parser.parse_args()
     args.cpu = args.cpu or not torch.cuda.is_available()
-
     torch.manual_seed(args.seed)
 
     device = torch.device("cpu" if args.cpu else "cuda")
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-
-    trainer = Trainer(device)
+    trainer = Trainer(device, args.epochs, args.batch_size, args.cpu)
 
     for epoch in range(1, args.epochs + 1):
         trainer.train(epoch)
@@ -194,7 +193,7 @@ def main():
             save_image(sample.view(64, 1, 28, 28),
                        'results/sample_' + str(epoch) + '.png')
 
-    plot_losss(trainer.losses)
+    trainer.plot_losses(trainer.losses)
 
 
 if __name__ == "__main__":
