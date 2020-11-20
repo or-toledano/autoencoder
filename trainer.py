@@ -165,6 +165,16 @@ class Trainer:
 
         return BCE + KLD
 
+    def loss_function_L1(self, recon_x, x):
+        L1_loss = nn.L1Loss()
+        return L1_loss(recon_x, x)
+
+
+    def loss_function_L2(self, recon_x, x):
+        L2_loss = nn.MSELoss()
+        return L2_loss(recon_x, x)
+
+
     def train(self, epoch):
         self.model.train()
         train_loss = 0
