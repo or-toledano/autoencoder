@@ -91,14 +91,12 @@ class VAE(nn.Module):
 
 
 class Trainer:
-    def __init__(self, device, epochs, batch_size):
+    def __init__(self, device):
         self.device = device
-        self.epochs = epochs
-        self.batch_size = batch_size
         self.data = CelebLoader()
         self.losses: List[float] = list()
-        self.model = VAE().to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
+        model = VAE().to(device)
+        optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     def plot_losss(self):
         """
@@ -140,8 +138,10 @@ class Trainer:
                            100. * batch_idx / len(self.data.train),
                            loss.item() / len(data)))
 
+        train_loss /= len(train_loader.dataset)
+        self.train_losses.append(train_loss)
         print('====> Epoch: {} Average loss: {:.4f}'.format(
-            epoch, train_loss / len(self.data.train.dataset)))
+            epoch, train_loss))
 
     def test_epoch(self, epoch):
         self.model.eval()
@@ -158,7 +158,8 @@ class Trainer:
                     save_image(comparison.cpu(),
                                'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
-        test_loss /= len(self.data.test.dataset)
+        test_loss /= len(self.test_loader.dataset)
+        self.test_losses.append(test_loss)
         print('====> Test set loss: {:.4f}'.format(test_loss))
 
 
