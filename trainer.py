@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 from torchvision import datasets, transforms
 
+
 # train_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=True, download=True,
 #                    transform=transforms.ToTensor()),
@@ -103,12 +104,23 @@ class Trainer:
         self.model = VAE().to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-    def plot_losses(self):
+    def plot_train_losses(self):
         """
-        do something with self.losses
         :return:
         """
-        plt.plot(self.losses)
+        plt.plot(self.train_losses)
+        plt.title('Results')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.show()
+
+    def plot_train_and_test_losses(self):
+        """
+        :return:
+        """
+        plt.plot(self.train_losses)
+        plt.plot(self.test_losses)
+        plt.legend(['train', 'test'])
         plt.title('Results')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
@@ -196,7 +208,7 @@ def main():
             save_image(sample.view(64, 1, 28, 28),
                        'results/sample_' + str(epoch) + '.png')
 
-    trainer.plot_losses(trainer.losses)
+    trainer.plot_train_losses()
 
 
 if __name__ == "__main__":
