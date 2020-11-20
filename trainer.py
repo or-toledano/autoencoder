@@ -56,6 +56,33 @@ class CelebLoader:
                                                   pin_memory=not self.cpu)
         images, labels = next(iter(data_loader))
 
+
+    def load_split_train_test(self,batch_size,dataset, valid_size=.05):
+        train_transforms = transforms.Compose([transforms.Resize(128),
+                                               transforms.ToTensor(),
+                                               ])
+        test_transforms = transforms.Compose([transforms.Resize(128),
+                                              transforms.ToTensor(),
+                                              ])
+        train_data = datasets.ImageFolder(dataset,
+                                          transform=train_transforms)
+        test_data = datasets.ImageFolder(dataset,
+                                         transform=test_transforms)
+        num_train = len(train_data)
+        indices = list(range(num_train))
+        split = int(np.floor(valid_size * num_train))
+        np.random.shuffle(indices)
+        from torch.utils.data.sampler import SubsetRandomSampler
+        train_idx, test_idx = indices[split:], indices[:split]
+        train_sampler = SubsetRandomSampler(train_idx)
+        test_sampler = SubsetRandomSampler(test_idx)
+        trainloader = torch.utils.data.DataLoader(train_data,
+                                                  sampler=train_sampler, batch_size=batch_size)
+        testloader = torch.utils.data.DataLoader(test_data,
+                                                 sampler=test_sampler, batch_size=batch_size)
+        return trainloader, testloader
+
+
     def train_iter(self):
         return (self.to_tensor(img) for img in self.train)
 
