@@ -12,7 +12,6 @@ from typing import Optional, List
 import matplotlib
 import matplotlib.pyplot as plt
 
-
 # train_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=True, download=True,
 #                    transform=transforms.ToTensor()),
@@ -20,6 +19,8 @@ import matplotlib.pyplot as plt
 # test_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=False, transform=transforms.ToTensor()),
 #     batch_size=args.batch_size, shuffle=True, **kwargs)
+
+PRINT_ITER = 10
 
 
 class CelebLoader:
@@ -81,12 +82,14 @@ class VAE(nn.Module):
 
 
 class Trainer:
-    def __init__(self, device):
+    def __init__(self, device, epochs, batch_size):
         self.device = device
+        self.epochs = epochs
+        self.batch_size = batch_size
         self.data = CelebLoader()
         self.losses: List[float] = list()
-        model = VAE().to(device)
-        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+        self.model = VAE().to(device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
     def plot_losss(self):
         """
@@ -122,31 +125,31 @@ class Trainer:
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
-            if batch_idx % self.args.log_interval == 0:
+            if batch_idx % PRINT_ITER == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(train_loader.dataset),
-                           100. * batch_idx / len(train_loader),
+                    epoch, batch_idx * len(data), len(self.data.train.dataset),
+                           100. * batch_idx / len(self.data.train),
                            loss.item() / len(data)))
 
         print('====> Epoch: {} Average loss: {:.4f}'.format(
-            epoch, train_loss / len(train_loader.dataset)))
+            epoch, train_loss / len(self.data.train.dataset)))
 
     def test_epoch(self, epoch):
-        model.eval()
+        self.model.eval()
         test_loss = 0
         with torch.no_grad():
-            for i, (data, _) in enumerate(test_loader):
+            for i, (data, _) in enumerate(self.data.test):
                 data = data.to(self.device)
                 recon_batch, mu, logvar = self.model(data)
                 test_loss += self.loss_function(recon_batch, data, mu, logvar).item()
                 if i == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
-                                            recon_batch.view(self.args.batch_size, 1, 28, 28)[:n]])
+                                            recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
                     save_image(comparison.cpu(),
                                'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
-        test_loss /= len(self.test_loader.dataset)
+        test_loss /= len(self.data.test.dataset)
         print('====> Test set loss: {:.4f}'.format(test_loss))
 
 
