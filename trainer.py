@@ -82,8 +82,16 @@ class Trainer:
     def __init__(self, device):
         self.device = device
         self.data = CelebLoader()
+        self.losses: List[float] = list()
         model = VAE().to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    def plot_losss(self):
+        """
+        do something with self.losses
+        :return:
+        """
+        pass
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def loss_function(self, recon_x, x, mu, logvar):
@@ -167,6 +175,8 @@ def main():
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 1, 28, 28),
                        'results/sample_' + str(epoch) + '.png')
+
+    plot_losss(trainer.losses)
 
 
 if __name__ == "__main__":
