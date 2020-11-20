@@ -10,6 +10,8 @@ import numpy as np
 import glob
 from typing import Optional, List
 
+from torchvision import datasets, transforms
+
 
 # train_loader = torch.utils.data.DataLoader(
 #     datasets.MNIST('../data', train=True, download=True,
@@ -33,14 +35,20 @@ class CelebLoader:
         self.train: Optional[List[str]] = None
         self.test: Optional[List[str]] = None
 
-    def partition_train_test(self):
+    def partition_train_test(self,batch_size,dataset):
         """
         :return: after this is invoked, train and test should be shuffled and partitioned
         """
-        np.random.shuffle(self.celebs)
-        train_start_idx = int(0.05 * len(self.celebs))
-        self.train = self.celebs[train_start_idx:]
-        self.test = self.celebs[:train_start_idx]
+        #np.random.shuffle(self.celebs)
+        #train_start_idx = int(0.05 * len(self.celebs))
+        #self.train = self.celebs[train_start_idx:]
+        #self.test = self.celebs[:train_start_idx]
+
+        self.transform = transforms.Compose([transforms.Resize(128),
+                                        transforms.ToTensor()])
+        dataset = datasets.ImageFolder(dataset, transform= self.transform)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        images, labels = next(iter(dataloader))
 
     def train_iter(self):
         return (self.to_tensor(img) for img in self.train)
