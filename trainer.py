@@ -9,6 +9,8 @@ from torchvision.utils import save_image
 import numpy as np
 import glob
 from typing import Optional, List
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 # train_loader = torch.utils.data.DataLoader(
@@ -91,7 +93,11 @@ class Trainer:
         do something with self.losses
         :return:
         """
-        pass
+        plt.plot(self.losses)
+        plt.title('Results')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.show()
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def loss_function(self, recon_x, x, mu, logvar):
