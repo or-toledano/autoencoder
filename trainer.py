@@ -139,7 +139,7 @@ class Trainer:
             self.optimizer.step()
             if batch_idx % PRINT_ITER == 0:
                 print(f'Train epoch {epoch} {batch_idx * len(data)}/{self.total_train} '
-                      f'({100. * batch_idx / self.total_train:.2f}%) average batch loss: {loss.item()/len(data):.5f}')
+                      f'({100. * batch_idx / self.total_train:.2f}%) average batch loss: {loss.item() / len(data):.5f}')
             batch_idx += 1
 
         train_loss /= self.total_train
@@ -163,7 +163,7 @@ class Trainer:
                                f'results/{RES_PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
-                          f'({100. * i / self.total_test:.2f}%) average batch loss: {loss/len(data):.5f}')
+                          f'({100. * i / self.total_test:.2f}%) average batch loss: {loss / len(data):.5f}')
                 i += 1
 
         test_loss /= self.total_test
@@ -173,6 +173,7 @@ class Trainer:
 
 @timing
 def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
+    assert 1 <= half_depth <= 6, "Bad number of layers. Input size is reduced by 2**layers"
     device = torch.device("cuda" if GPU else "cpu")
     trainer = Trainer(device, epochs, batch_size, half_depth, loss)
 
