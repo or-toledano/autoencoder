@@ -1,2 +1,2 @@
-# variational-auto-encoder
-VAE
+# auto-encoder
+AE
