@@ -1,339 +1,202 @@
-from __future__ import print_function
-
-from torch import Tensor
 import argparse
 import torch.utils.data
-from torch import nn, optim
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torchvision.utils import save_image
 import numpy as np
-from typing import List, Tuple
 import matplotlib.pyplot as plt
+
+from torch import Tensor, nn, optim
+from torch.nn import functional as fun
+from torchvision.utils import save_image
+from typing import List, Tuple
 from torch.utils.data.sampler import SubsetRandomSampler
-
 from torchvision import datasets, transforms
-from torchvision.datasets import CelebA
 
-latent_dim = 128
-
+BATCHES_PER_EPOCH = 40  # TODO: for GPU, please change so batch_size*BATCHES_PER_EPOCH ~= 200,000
+PLOT_ALL = True
 PRINT_ITER = 10
+
+IMG_DIM = 128
+TRAIN_RATIO = .95
 TEST_RATIO = .05
 IMG_FOLDER = 'CelebA'
+VISUALIZE_IMAGE_NUM = 16
+CHANNELS = 3
 
 
-def load_split_train_test(batch_size, cpu) -> Tuple[DataLoader, DataLoader]:
-    train_transforms = transforms.Compose([transforms.Resize((64, 64)),
-                                           transforms.ToTensor(),
-                                           ])
-    test_transforms = transforms.Compose([transforms.Resize((64, 64)), transforms.ToTensor()])
-    train_data = datasets.ImageFolder(IMG_FOLDER, transform=train_transforms)
-    test_data = datasets.ImageFolder(IMG_FOLDER, transform=test_transforms)
-    num_train = len(train_data)
-    indices = list(range(num_train))[:5000]
-    split = int(np.floor(TEST_RATIO * num_train))
+def load_train_test(batch_size, gpu) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int, int]:
+    data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
+                                                                          transforms.ToTensor()]))
+    n_data = len(data)
+    indices = list(range(n_data))
     np.random.shuffle(indices)
+    indices = indices[:batch_size * BATCHES_PER_EPOCH]
+    split = int(np.floor(TEST_RATIO * len(indices)))
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
-    train_loader = torch.utils.data.DataLoader(train_data,
-                                               sampler=train_sampler, batch_size=batch_size, num_workers=not cpu,
-                                               pin_memory=not cpu)
-    test_loader = torch.utils.data.DataLoader(test_data,
-                                              sampler=test_sampler, batch_size=batch_size, num_workers=not cpu,
-                                              pin_memory=not cpu)
-    return train_loader, test_loader
-
-
-def internet():
-    sample_dataloader = DataLoader(CelebA(root='CelebA',
-                                          split="test",
-                                          transform=transform,
-                                          download=False),
-                                   batch_size=144,
-                                   shuffle=True,
-                                   drop_last=True)
+    train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=gpu,
+                                               pin_memory=gpu)
+    test_loader = torch.utils.data.DataLoader(data, sampler=test_sampler, batch_size=batch_size, num_workers=gpu,
+                                              pin_memory=gpu)
+    return train_loader, test_loader, len(train_idx), len(test_idx)
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, half_depth) -> None:
         super(AutoEncoder, self).__init__()
 
-        self.latent_dim = latent_dim  # TODO
+        self.latent_dim = 256
 
-        modules = []
-        hidden_dims = [32, 64, 128, 256, 512]
+        modules = list()
+        first_dim = IMG_DIM >> 1
+        dims = [first_dim << i for i in range(half_depth)]
 
-        in_channels = 3
-        for h_dim in hidden_dims:
+        in_channels = CHANNELS
+        dim: int = 0
+        for dim in dims:
             modules.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, out_channels=h_dim,
-                              kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(h_dim),
+                    nn.Conv2d(in_channels, dim, kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(dim),
                     nn.LeakyReLU())
             )
-            in_channels = h_dim
+            in_channels = dim
+        # FC layer (full sized kernel convolution, acts the same)
+        modules.append(
+            nn.Sequential(
+                nn.Conv2d(dim, self.latent_dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
+                nn.BatchNorm2d(self.latent_dim),
+                nn.LeakyReLU())
+        )
 
         self.encoder = nn.Sequential(*modules)
-        self.fc_mu = nn.Linear(hidden_dims[-1] * 4, latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1] * 4, latent_dim)
 
-        # Build Decoder
-        modules = []
+        dims.reverse()
 
-        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 4)
+        modules = [nn.Sequential(
+            nn.ConvTranspose2d(self.latent_dim, dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
+            nn.BatchNorm2d(dim),
+            nn.LeakyReLU())]
 
-        hidden_dims.reverse()
-
-        for i in range(len(hidden_dims) - 1):
+        dims.append(CHANNELS)
+        for dim in dims[1:]:
             modules.append(
                 nn.Sequential(
-                    nn.ConvTranspose2d(hidden_dims[i],
-                                       hidden_dims[i + 1],
-                                       kernel_size=3,
-                                       stride=2,
-                                       padding=1,
+                    nn.ConvTranspose2d(in_channels, out_channels=dim, kernel_size=3, stride=2, padding=1,
                                        output_padding=1),
-                    nn.BatchNorm2d(hidden_dims[i + 1]),
+                    nn.BatchNorm2d(dim),
                     nn.LeakyReLU())
             )
+            in_channels = dim
 
         self.decoder = nn.Sequential(*modules)
 
-        self.final_layer = nn.Sequential(
-            nn.ConvTranspose2d(hidden_dims[-1],
-                               hidden_dims[-1],
-                               kernel_size=3,
-                               stride=2,
-                               padding=1,
-                               output_padding=1),
-            nn.BatchNorm2d(hidden_dims[-1]),
-            nn.LeakyReLU(),
-            nn.Conv2d(hidden_dims[-1], out_channels=3,
-                      kernel_size=3, padding=1),
-            nn.Tanh())
-
-    def encode(self, input: Tensor) -> List[Tensor]:
-        """
-        Encodes the input by passing through the encoder network
-        and returns the latent codes.
-        :param input: (Tensor) Input tensor to encoder [N x C x H x W]
-        :return: (Tensor) List of latent codes
-        """
-        result = self.encoder(input)
-        result = torch.flatten(result, start_dim=1)
-
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
-        mu = self.fc_mu(result)
-        log_var = self.fc_var(result)
-
-        return [mu, log_var]
-
-    def decode(self, z: Tensor) -> Tensor:
-        """
-        Maps the given latent codes
-        onto the image space.
-        :param z: (Tensor) [B x D]
-        :return: (Tensor) [B x C x H x W]
-        """
-        result = self.decoder_input(z)
-        result = result.view(-1, 512, 2, 2)
-        result = self.decoder(result)
-        result = self.final_layer(result)
-        return result
-
-    def reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
-        """
-        Reparameterization trick to sample from N(mu, var) from
-        N(0,1).
-        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
-        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
-        :return: (Tensor) [B x D]
-        """
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return eps * std + mu
-
-    def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
-        mu, log_var = self.encode(input)
-        z = self.reparameterize(mu, log_var)
-        return [self.decode(z), input, mu, log_var]
-
-    def loss_function(self,
-                      *args,
-                      **kwargs) -> dict:
-        """
-        Computes the VAE loss function.
-        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        recons = args[0]
-        input = args[1]
-        mu = args[2]
-        log_var = args[3]
-
-        kld_weight = kwargs['M_N']  # Account for the minibatch samples from the dataset
-        recons_loss = F.mse_loss(recons, input)
-
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
-
-        loss = recons_loss + kld_weight * kld_loss
-        return {'loss': loss, 'Reconstruction_Loss': recons_loss, 'KLD': -kld_loss}
-
-    def sample(self,
-               num_samples: int,
-               current_device: int, **kwargs) -> Tensor:
-        """
-        Samples from the latent space and return the corresponding
-        image space map.
-        :param num_samples: (Int) Number of samples
-        :param current_device: (Int) Device to run the model
-        :return: (Tensor)
-        """
-        z = torch.randn(num_samples,
-                        self.latent_dim)
-
-        z = z.to(current_device)
-
-        samples = self.decode(z)
-        return samples
-
-    def generate(self, x: Tensor, **kwargs) -> Tensor:
-        """
-        Given an input image x, returns the reconstructed image
-        :param x: (Tensor) [B x C x H x W]
-        :return: (Tensor) [B x C x H x W]
-        """
-
-        return self.forward(x)[0]
+    def forward(self, source: Tensor) -> Tensor:
+        encoded = self.encoder(source)
+        decoded = self.decoder(encoded)
+        return decoded
 
 
 class Trainer:
-    def __init__(self, device, epochs, batch_size, cpu: bool):
+    @staticmethod
+    def loss_function_l1(recon, source):
+        return fun.l1_loss(recon, source)
+
+    @staticmethod
+    def loss_function_l2(recon, source):
+        return fun.mse_loss(recon, source)
+
+    def __init__(self, device, epochs, batch_size, half_depth, loss: str, gpu: bool):
         self.device = device
         self.epochs = epochs
         self.batch_size = batch_size
-        self.cpu = cpu
-        self.train_loader, self.test_loader = load_split_train_test(batch_size, cpu)
+        self.s_loss = loss
+        self.loss_function = self.loss_function_l1 if loss == 'l1' else self.loss_function_l2
+        self.half_depth = half_depth
+        self.gpu = gpu
+        self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size, gpu)
         self.train_losses: List[float] = list()
         self.test_losses: List[float] = list()
-        self.model = AutoEncoder().to(device)
+        self.model = AutoEncoder(half_depth).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-    def plot_train_losses(self):
-        """
-        :return:
-        """
-        plt.plot(self.train_losses)
-        plt.title('Results')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.show()
+    def __str__(self):
+        return f'epochs_{self.epochs}_batch_{self.batch_size}_loss_{self.s_loss}_enc_depth{self.half_depth}'
 
     def plot_train_and_test_losses(self):
-        """
-        :return:
-        """
         plt.plot(self.train_losses)
         plt.plot(self.test_losses)
         plt.legend(['train', 'test'])
         plt.title('Results')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
-        plt.show()
-
-    @staticmethod
-    def loss_function(recons, input, mu, log_var) -> dict:
-        """
-        Computes the VAE loss function.
-        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
-        :param args:
-        :param kwargs:
-        :return:
-        """
-
-        recons_loss = F.mse_loss(recons, input)
-        loss = recons_loss.mean()
-        return loss
-
-    @staticmethod
-    def loss_function_l1(recon_x, x):
-        l1_loss = nn.L1Loss()
-        return l1_loss(recon_x, x)
-
-    @staticmethod
-    def loss_function_l2(recon_x, x):
-        l2_loss = nn.MSELoss()
-        return l2_loss(recon_x, x)
+        if PLOT_ALL:
+            plt.show()
 
     def train(self, epoch):
         self.model.train()
         train_loss = 0
-        for batch_idx, data in enumerate(self.train_loader):
+        batch_idx = 0
+        for data in self.train_loader:
             data = data[0].to(self.device)
             self.optimizer.zero_grad()
-            recon_batch, _, mu, logvar = self.model(data)
-            loss = self.loss_function(recon_batch, data, mu, logvar)
+            recon = self.model(data)
+            loss = self.loss_function(recon, data)
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
             if batch_idx % PRINT_ITER == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(self.train_loader.dataset),
-                           100. * batch_idx / len(self.test_loader.dataset),
-                           loss.item() / len(data)))
+                print(f'Train epoch {epoch} {batch_idx * len(data)}/{self.total_train} '
+                      f'({100. * batch_idx / self.total_train:.2f}%) Loss: {loss.item() / len(data):.5f}')
+            batch_idx += 1
 
-        train_loss /= len(self.train_loader.dataset)
+        train_loss /= batch_idx
         self.train_losses.append(train_loss)
-        print('====> Epoch: {} Average loss: {:.4f}'.format(
-            epoch, train_loss))
+        print(f'***** Epoch {epoch} average train loss is {train_loss:.5f}')
 
     def test_epoch(self, epoch):
         self.model.eval()
         test_loss = 0
+        i = 0
         with torch.no_grad():
-            for i, data in enumerate(self.test_loader):
+            for data in self.test_loader:
                 data = data[0].to(self.device)
-                recon_batch, _, mu, logvar = self.model(data)
-                test_loss += self.loss_function(recon_batch, data, mu, logvar).item()
+                recon = self.model(data)
+                loss = self.loss_function(recon, data).item()
+                test_loss += loss
                 if i == 0:
-                    n = min(data.size(0), 8)
-                    comparison = torch.cat([data[:n],
-                                            recon_batch.view(self.batch_size, 3, 64, 64)[:n]])
+                    n_vis = min(data.size(0), VISUALIZE_IMAGE_NUM)
+                    comparison = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(comparison.cpu(),
-                               'results/reconstruction_' + str(epoch) + '.png', nrow=n)
+                               f'results/{self}_epoch_{epoch}.png', nrow=n_vis)
+                if i % PRINT_ITER == 0:
+                    print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
+                          f'({100. * i / self.total_test:.2f}%) Loss: {loss / len(data):.5f}')
+                i += 1
 
-        test_loss /= len(self.test_loader.dataset)
+        test_loss /= i
         self.test_losses.append(test_loss)
-        print('====> Test set loss: {:.4f}'.format(test_loss))
+        print(f'***** Epoch {epoch} average test loss is {test_loss:.5f}')
 
 
-def run_trainer(trainer):
+def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2', gpu: bool = False):
+    device = torch.device("cuda" if gpu else "cpu")
+    trainer = Trainer(device, epochs, batch_size, half_depth, loss, gpu)
+
     for epoch in range(0, trainer.epochs):
         trainer.train(epoch)
         trainer.test_epoch(epoch)
-        with torch.no_grad():
-            sam = trainer.model.sample(64, trainer.device).cpu()
-            save_image(sam.view(64, 3, 64, 64),
-                       'results/sample_' + str(epoch) + '.png')  # TODO  the first 64 is the no. of visuallizations
 
-    trainer.plot_train_losses()
+    trainer.plot_train_and_test_losses()
 
 
 def main():
+    np.random.seed(42)
+    torch.manual_seed(42)
     parser = argparse.ArgumentParser()
     parser.add_argument('--cpu', action='store_true', default=False,
                         help='force CPU usage')
     args = parser.parse_args()
-    args.cpu = args.cpu or not torch.cuda.is_available()
-    device = torch.device("cpu" if args.cpu else "cuda")
-    torch.manual_seed(42)
-
-    trainer = Trainer(device, epochs=1, batch_size=121, cpu=args.cpu)
-    run_trainer(trainer)
+    gpu = not args.cpu and torch.cuda.is_available()
+    run_trainer(epochs=1, batch_size=100, half_depth=5, loss='l2', gpu=gpu)
 
 
 if __name__ == "__main__":
