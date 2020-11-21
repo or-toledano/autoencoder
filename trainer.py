@@ -1,4 +1,3 @@
-import argparse
 import torch.utils.data
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,8 +20,12 @@ IMG_FOLDER = 'CelebA'
 VISUALIZE_IMAGE_NUM = 16
 CHANNELS = 3
 
+np.random.seed(42)
+torch.manual_seed(42)
+GPU = torch.cuda.is_available()
 
-def load_train_test(batch_size, gpu) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int, int]:
+
+def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int, int]:
     data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
                                                                           transforms.ToTensor()]))
     n_data = len(data)
@@ -32,10 +35,10 @@ def load_train_test(batch_size, gpu) -> Tuple[torch.utils.data.DataLoader, torch
     split = int(np.floor(TEST_RATIO * len(indices)))
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
-    train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=gpu,
-                                               pin_memory=gpu)
-    test_loader = torch.utils.data.DataLoader(data, sampler=test_sampler, batch_size=batch_size, num_workers=gpu,
-                                              pin_memory=gpu)
+    train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=GPU,
+                                               pin_memory=GPU)
+    test_loader = torch.utils.data.DataLoader(data, sampler=test_sampler, batch_size=batch_size, num_workers=GPU,
+                                              pin_memory=GPU)
     return train_loader, test_loader, len(train_idx), len(test_idx)
 
 
@@ -104,15 +107,14 @@ class Trainer:
     def loss_function_l2(recon, source):
         return fun.mse_loss(recon, source)
 
-    def __init__(self, device, epochs, batch_size, half_depth, loss: str, gpu: bool):
+    def __init__(self, device, epochs, batch_size, half_depth, loss: str):
         self.device = device
         self.epochs = epochs
         self.batch_size = batch_size
         self.s_loss = loss
         self.loss_function = self.loss_function_l1 if loss == 'l1' else self.loss_function_l2
         self.half_depth = half_depth
-        self.gpu = gpu
-        self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size, gpu)
+        self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
         self.train_losses: List[float] = list()
         self.test_losses: List[float] = list()
         self.model = AutoEncoder(half_depth).to(device)
@@ -177,9 +179,9 @@ class Trainer:
         print(f'***** Epoch {epoch} average test loss is {test_loss:.5f}')
 
 
-def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2', gpu: bool = False):
-    device = torch.device("cuda" if gpu else "cpu")
-    trainer = Trainer(device, epochs, batch_size, half_depth, loss, gpu)
+def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
+    device = torch.device("cuda" if GPU else "cpu")
+    trainer = Trainer(device, epochs, batch_size, half_depth, loss)
 
     for epoch in range(0, trainer.epochs):
         trainer.train(epoch)
@@ -189,14 +191,7 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2', gpu: bool = F
 
 
 def main():
-    np.random.seed(42)
-    torch.manual_seed(42)
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--cpu', action='store_true', default=False,
-                        help='force CPU usage')
-    args = parser.parse_args()
-    gpu = not args.cpu and torch.cuda.is_available()
-    run_trainer(epochs=1, batch_size=100, half_depth=5, loss='l2', gpu=gpu)
+    run_trainer(epochs=10, batch_size=100, half_depth=5, loss='l2')
 
 
 if __name__ == "__main__":
