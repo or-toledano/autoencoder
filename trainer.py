@@ -8,10 +8,14 @@ from torchvision.utils import save_image
 from typing import List, Tuple
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets, transforms
+from timewrap import timing
 
-BATCHES_PER_EPOCH = 40  # TODO: for GPU, please change so batch_size*BATCHES_PER_EPOCH ~= 200,000
+BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_PER_EPOCH ~= 200,000
 PLOT_ALL = True
 PRINT_ITER = 10
+RES_PREFIX = f'{BATCHES_PER_EPOCH}'
+
+# Less likely you would need to change these:
 
 IMG_DIM = 128
 TRAIN_RATIO = .95
@@ -55,39 +59,27 @@ class AutoEncoder(nn.Module):
         in_channels = CHANNELS
         dim: int = 0
         for dim in dims:
-            modules.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, dim, kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(dim),
-                    nn.LeakyReLU())
-            )
+            modules.extend([nn.Conv2d(in_channels, dim, kernel_size=3, stride=2, padding=1),
+                            nn.BatchNorm2d(dim),
+                            nn.LeakyReLU()])
             in_channels = dim
         # FC layer (full sized kernel convolution, acts the same)
-        modules.append(
-            nn.Sequential(
-                nn.Conv2d(dim, self.latent_dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
-                nn.BatchNorm2d(self.latent_dim),
-                nn.LeakyReLU())
-        )
+        modules.extend([nn.Conv2d(dim, self.latent_dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
+                        nn.BatchNorm2d(self.latent_dim),
+                        nn.LeakyReLU()])
 
         self.encoder = nn.Sequential(*modules)
 
         dims.reverse()
 
-        modules = [nn.Sequential(
-            nn.ConvTranspose2d(self.latent_dim, dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
-            nn.BatchNorm2d(dim),
-            nn.LeakyReLU())]
+        modules = [nn.ConvTranspose2d(self.latent_dim, dim, kernel_size=IMG_DIM >> half_depth, stride=1, padding=0),
+                   nn.BatchNorm2d(dim), nn.LeakyReLU()]
 
         dims.append(CHANNELS)
         for dim in dims[1:]:
-            modules.append(
-                nn.Sequential(
-                    nn.ConvTranspose2d(in_channels, out_channels=dim, kernel_size=3, stride=2, padding=1,
-                                       output_padding=1),
-                    nn.BatchNorm2d(dim),
-                    nn.LeakyReLU())
-            )
+            modules.extend([
+                nn.ConvTranspose2d(in_channels, out_channels=dim, kernel_size=3, stride=2, padding=1, output_padding=1),
+                nn.BatchNorm2d(dim), nn.LeakyReLU()])
             in_channels = dim
 
         self.decoder = nn.Sequential(*modules)
@@ -118,7 +110,7 @@ class Trainer:
         self.train_losses: List[float] = list()
         self.test_losses: List[float] = list()
         self.model = AutoEncoder(half_depth).to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
+        self.optimizer = optim.Adam(self.model.parameters())
 
     def __str__(self):
         return f'epochs_{self.epochs}_batch_{self.batch_size}_loss_{self.s_loss}_enc_depth{self.half_depth}'
@@ -147,10 +139,10 @@ class Trainer:
             self.optimizer.step()
             if batch_idx % PRINT_ITER == 0:
                 print(f'Train epoch {epoch} {batch_idx * len(data)}/{self.total_train} '
-                      f'({100. * batch_idx / self.total_train:.2f}%) Loss: {loss.item() / len(data):.5f}')
+                      f'({100. * batch_idx / self.total_train:.2f}%) average batch loss: {loss.item()/len(data):.5f}')
             batch_idx += 1
 
-        train_loss /= batch_idx
+        train_loss /= self.total_train
         self.train_losses.append(train_loss)
         print(f'***** Epoch {epoch} average train loss is {train_loss:.5f}')
 
@@ -165,20 +157,21 @@ class Trainer:
                 loss = self.loss_function(recon, data).item()
                 test_loss += loss
                 if i == 0:
-                    n_vis = min(data.size(0), VISUALIZE_IMAGE_NUM)
-                    comparison = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
-                    save_image(comparison.cpu(),
-                               f'results/{self}_epoch_{epoch}.png', nrow=n_vis)
+                    n_vis = min(VISUALIZE_IMAGE_NUM, data.size(0))
+                    pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
+                    save_image(pairs.cpu(),
+                               f'results/{RES_PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
-                          f'({100. * i / self.total_test:.2f}%) Loss: {loss / len(data):.5f}')
+                          f'({100. * i / self.total_test:.2f}%) average batch loss: {loss/len(data):.5f}')
                 i += 1
 
-        test_loss /= i
+        test_loss /= self.total_test
         self.test_losses.append(test_loss)
         print(f'***** Epoch {epoch} average test loss is {test_loss:.5f}')
 
 
+@timing
 def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
     device = torch.device("cuda" if GPU else "cpu")
     trainer = Trainer(device, epochs, batch_size, half_depth, loss)
@@ -191,7 +184,7 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
 
 
 def main():
-    run_trainer(epochs=10, batch_size=100, half_depth=5, loss='l2')
+    run_trainer(epochs=10, batch_size=144, half_depth=5, loss='l2')
 
 
 if __name__ == "__main__":
