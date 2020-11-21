@@ -18,6 +18,7 @@ RES_PREFIX = f'{BATCHES_PER_EPOCH}'
 # Less likely you would need to change these:
 
 IMG_DIM = 128
+LATENT_DIM = 256
 TRAIN_RATIO = .95
 TEST_RATIO = .05
 IMG_FOLDER = 'CelebA'
@@ -47,10 +48,10 @@ def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.util
 
 
 class AutoEncoder(nn.Module):
+    latent_dim = LATENT_DIM
+
     def __init__(self, half_depth) -> None:
         super(AutoEncoder, self).__init__()
-
-        self.latent_dim = 256
 
         modules = list()
         first_dim = IMG_DIM >> 1
@@ -91,20 +92,12 @@ class AutoEncoder(nn.Module):
 
 
 class Trainer:
-    @staticmethod
-    def loss_function_l1(recon, source):
-        return fun.l1_loss(recon, source)
-
-    @staticmethod
-    def loss_function_l2(recon, source):
-        return fun.mse_loss(recon, source)
-
     def __init__(self, device, epochs, batch_size, half_depth, loss: str):
         self.device = device
         self.epochs = epochs
         self.batch_size = batch_size
         self.s_loss = loss
-        self.loss_function = self.loss_function_l1 if loss == 'l1' else self.loss_function_l2
+        self.loss_function = fun.l1_loss if loss == 'l1' else fun.mse_loss
         self.half_depth = half_depth
         self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
         self.train_losses: List[float] = list()
