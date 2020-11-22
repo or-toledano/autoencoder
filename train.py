@@ -185,7 +185,7 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
 
 def main():
     loss_list = ['l1', 'l2']
-    epochs_list = [2, 3, 4]
+    epochs_list = [10, 100, 400]
     half_depth_list = [2, 3, 4, 5]
     batch_size_list = [10, 100, 1000, 10000]
     for e in epochs_list:
