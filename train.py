@@ -118,6 +118,7 @@ class Trainer:
         plt.title('Results')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
+        plt.savefig(f'{RESULTS_FOLDER}/epoch_error_graph_{self}.png')
         if PLOT_ALL:
             plt.show()
 
@@ -183,7 +184,7 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
 
 def main():
     loss_list = ['l1', 'l2']
-    epochs_list = [10, 20, 40]
+    epochs_list = [2, 3, 4]
     half_depth_list = [2, 3, 4, 5]
     batch_size_list = [10, 100, 1000, 10000]
     for e in epochs_list:
@@ -191,7 +192,6 @@ def main():
             for b in batch_size_list:
                 for d in half_depth_list:
                     run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
-
 
 
 if __name__ == "__main__":
