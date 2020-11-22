@@ -10,6 +10,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets, transforms
 from timewrap import timing
 from pathlib import Path
+import argparse
 
 BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_PER_EPOCH ~= 200,000
 PLOT_ALL = True
@@ -37,11 +38,11 @@ def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.util
     data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
                                                                           transforms.ToTensor()]))
     n_data = len(data)
-    BATCHES_PER_EPOCH = int(np.floor(n_data / batch_size))
+    BATCHES_PER_EPOCH = int(np.floor(n_data/batch_size))
     indices = list(range(n_data))
     np.random.shuffle(indices)
     indices = indices[:batch_size * BATCHES_PER_EPOCH]
-    split = int(batch_size * np.floor(TEST_RATIO * BATCHES_PER_EPOCH))
+    split = int(np.floor(TEST_RATIO * len(indices)))
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
     train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=GPU,
@@ -183,17 +184,28 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
 
     trainer.plot_train_and_test_losses()
 
+def get_args():
+    parser = argparse.ArgumentParser(description='Trains and tests a autoencoder.')
+    parser.add_argument('-bs', '--batch_size', type=int, default=144)
+    parser.add_argument('-e', '--epochs', type=int, default=10)
+    parser.add_argument('-h', '--half_depth', type=int, default=5)
+    parser.add_argument('-l', '--loss', type=str, default='l1')
 
+
+    return parser.parse_args()
 def main():
-    loss_list = ['l1', 'l2']
-    epochs_list = [10, 100, 400]
-    half_depth_list = [2, 3, 4, 5]
-    batch_size_list = [10, 100, 1000, 10000]
-    for e in epochs_list:
-        for l in loss_list:
-            for b in batch_size_list:
-                for d in half_depth_list:
-                    run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
+    args = get_args()
+    run_trainer(epochs=args.epochs, batch_size=args.batch_size, half_depth=args.half_depth, loss=args.loss)
+
+    # loss_list = ['l1', 'l2']
+    # epochs_list = [10, 100, 400]
+    # half_depth_list = [2, 3, 4, 5]
+    # batch_size_list = [10, 100, 1000, 10000]
+    # for e in epochs_list:
+    #     for l in loss_list:
+    #         for b in batch_size_list:
+    #             for d in half_depth_list:
+    #                 run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
 
 
 if __name__ == "__main__":
