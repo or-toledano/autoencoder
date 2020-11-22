@@ -14,7 +14,7 @@ from pathlib import Path
 BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_PER_EPOCH ~= 200,000
 PLOT_ALL = True
 PRINT_ITER = 10
-RES_PREFIX = f'{BATCHES_PER_EPOCH}'
+PREFIX = f''
 RESULTS_FOLDER = 'results'
 
 # Less likely you would need to change these:
@@ -33,6 +33,7 @@ GPU = torch.cuda.is_available()
 
 
 def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int, int]:
+    global BATCHES_PER_EPOCH
     data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
                                                                           transforms.ToTensor()]))
     n_data = len(data)
@@ -156,7 +157,7 @@ class Trainer:
                     n_vis = min(VISUALIZE_IMAGE_NUM, data.size(0))
                     pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(pairs.cpu(),
-                               f'{RESULTS_FOLDER}/{RES_PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
+                               f'{RESULTS_FOLDER}/{PREFIX}bpe_{BATCHES_PER_EPOCH}_{self}_epoch_{epoch}.png', nrow=n_vis)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
                           f'({100. * i / self.total_test:.2f}%) average batch loss: {loss / len(data):.5f}')
