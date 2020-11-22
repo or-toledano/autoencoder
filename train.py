@@ -112,14 +112,14 @@ class Trainer:
     def __str__(self):
         return f'epochs_{self.epochs}_batch_{self.batch_size}_loss_{self.s_loss}_enc_depth{self.half_depth}'
 
-    def plot_train_and_test_losses(self):
+    def plot_train_and_test_losses(self, epoch=99):
         plt.plot(self.train_losses)
         plt.plot(self.test_losses)
         plt.legend(['train', 'test'])
         plt.title('Results')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
-        plt.savefig(f'{RESULTS_FOLDER}/epoch_error_graph_{self}.png')
+        plt.savefig(f'{RESULTS_FOLDER}/epoch_error_graph_{self}_epoch_{epoch}.png')
         if PLOT_ALL:
             plt.show()
 
@@ -159,6 +159,7 @@ class Trainer:
                     pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(pairs.cpu(),
                                f'{RESULTS_FOLDER}/{PREFIX}bpe_{BATCHES_PER_EPOCH}_{self}_epoch_{epoch}.png', nrow=n_vis)
+                    self.plot_train_and_test_losses(epoch)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
                           f'({100. * i / self.total_test:.2f}%) average batch loss: {loss / len(data):.5f}')
