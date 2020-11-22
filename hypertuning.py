@@ -1,4 +1,4 @@
-from hypertuned_funcs import batch_partial, loss_partial
+from hypertuned_funcs import batch_partial, loss_partial, epochs_partial
 
 from multiprocessing import Pool
 import tqdm
