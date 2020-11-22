@@ -23,7 +23,7 @@ IMG_DIM = 128
 LATENT_DIM = 256
 TRAIN_RATIO = .95
 TEST_RATIO = .05
-IMG_FOLDER = 'CelebA'
+IMG_FOLDER = '/specific/netapp5_3/rent_public/dcor-01-2021/ronmokady/workshop21/team3/CelebA'
 VISUALIZE_IMAGE_NUM = 16
 CHANNELS = 3
 
@@ -104,7 +104,7 @@ class Trainer:
         self.s_loss = loss
         self.loss_function = fun.l1_loss if loss == 'l1' else fun.mse_loss
         self.half_depth = half_depth
-        self.results: str = str(self)
+        self.results: str = f'results/{self}'
         Path(self.results).mkdir(exist_ok=True)
 
         self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
