@@ -42,6 +42,7 @@ def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.util
     np.random.shuffle(indices)
     indices = indices[:batch_size * BATCHES_PER_EPOCH]
     split = int(batch_size * np.floor(TEST_RATIO * BATCHES_PER_EPOCH))
+
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
     train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=GPU,
@@ -104,6 +105,7 @@ class Trainer:
         self.loss_function = fun.l1_loss if loss == 'l1' else fun.mse_loss
         self.half_depth = half_depth
         self.results: str = str(self)
+        Path(self.results).mkdir(exist_ok=True)
 
         self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
         self.train_losses: List[float] = list()
@@ -177,7 +179,6 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
     assert 1 <= half_depth <= 6, "Bad number of layers. Input size is reduced by 2**layers"
     device = torch.device("cuda" if GPU else "cpu")
     trainer = Trainer(device, epochs, batch_size, half_depth, loss)
-    Path(trainer.results).mkdir(exist_ok=True)
 
     for epoch in range(0, trainer.epochs):
         trainer.train(epoch)
