@@ -9,11 +9,13 @@ from typing import List, Tuple
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets, transforms
 from timewrap import timing
+from pathlib import Path
 
 BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_PER_EPOCH ~= 200,000
 PLOT_ALL = True
 PRINT_ITER = 10
 RES_PREFIX = f'{BATCHES_PER_EPOCH}'
+RESULTS_FOLDER = 'results'
 
 # Less likely you would need to change these:
 
@@ -153,7 +155,7 @@ class Trainer:
                     n_vis = min(VISUALIZE_IMAGE_NUM, data.size(0))
                     pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(pairs.cpu(),
-                               f'results/{RES_PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
+                               f'{RESULTS_FOLDER}/{RES_PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
                           f'({100. * i / self.total_test:.2f}%) average batch loss: {loss / len(data):.5f}')
@@ -167,6 +169,7 @@ class Trainer:
 @timing
 def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
     assert 1 <= half_depth <= 6, "Bad number of layers. Input size is reduced by 2**layers"
+    Path(RESULTS_FOLDER).mkdir(exist_ok=True)
     device = torch.device("cuda" if GPU else "cpu")
     trainer = Trainer(device, epochs, batch_size, half_depth, loss)
 
