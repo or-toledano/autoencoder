@@ -1,2 +1,2 @@
 # auto-encoder
-AE
+train.py
