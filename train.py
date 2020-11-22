@@ -188,11 +188,11 @@ def get_args():
     parser = argparse.ArgumentParser(description='Trains and tests a autoencoder.')
     parser.add_argument('-bs', '--batch_size', type=int, default=144)
     parser.add_argument('-e', '--epochs', type=int, default=10)
-    parser.add_argument('-h', '--half_depth', type=int, default=5)
+    parser.add_argument('-hd', '--half_depth', type=int, default=5)
     parser.add_argument('-l', '--loss', type=str, default='l1')
 
-
     return parser.parse_args()
+
 def main():
     args = get_args()
     run_trainer(epochs=args.epochs, batch_size=args.batch_size, half_depth=args.half_depth, loss=args.loss)
