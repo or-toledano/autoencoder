@@ -184,17 +184,15 @@ def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
 
 
 def main():
-    run_trainer(epochs=2, batch_size=144, half_depth=2, loss='l2')
-    # loss_list = ['l1', 'l2']
-    # epochs_list = [10, 100, 400]
-    # half_depth_list = [2, 3, 4, 5]
-    # batch_size_list = [10, 100, 1000, 10000]
-    # for e in epochs_list:
-    #     for l in loss_list:
-    #         for b in batch_size_list:
-    #             for d in half_depth_list:
-    #                 run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
-    pass
+    loss_list = ['l1', 'l2']
+    epochs_list = [10, 100, 400]
+    half_depth_list = [2, 3, 4, 5]
+    batch_size_list = [10, 100, 1000, 10000]
+    for e in epochs_list:
+        for l in loss_list:
+            for b in batch_size_list:
+                for d in half_depth_list:
+                    run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
 
 
 if __name__ == "__main__":

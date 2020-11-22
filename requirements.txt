@@ -4,3 +4,4 @@ numpy
 matplotlib
 pytorch-lightning
 tqdm
+argparse
