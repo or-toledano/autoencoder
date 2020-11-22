@@ -105,7 +105,7 @@ class Trainer:
         self.loss_function = fun.l1_loss if loss == 'l1' else fun.mse_loss
         self.half_depth = half_depth
         self.results: str = f'results/{self}'
-        Path(self.results).mkdir(exist_ok=True)
+        Path(self.results).mkdir(exist_ok=True, parents=True)
 
         self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
         self.train_losses: List[float] = list()
