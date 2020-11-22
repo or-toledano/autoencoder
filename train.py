@@ -16,7 +16,6 @@ BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_P
 PLOT_ALL = True
 PRINT_ITER = 10
 PREFIX = f''
-RESULTS_FOLDER = 'results'
 
 # Less likely you would need to change these:
 
@@ -38,11 +37,11 @@ def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.util
     data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
                                                                           transforms.ToTensor()]))
     n_data = len(data)
-    BATCHES_PER_EPOCH = int(np.floor(n_data/batch_size))
+    BATCHES_PER_EPOCH = int(np.floor(n_data / batch_size))
     indices = list(range(n_data))
     np.random.shuffle(indices)
     indices = indices[:batch_size * BATCHES_PER_EPOCH]
-    split = int(np.floor(TEST_RATIO * len(indices)))
+    split = int(batch_size * np.floor(TEST_RATIO * BATCHES_PER_EPOCH))
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
     train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=GPU,
@@ -104,6 +103,8 @@ class Trainer:
         self.s_loss = loss
         self.loss_function = fun.l1_loss if loss == 'l1' else fun.mse_loss
         self.half_depth = half_depth
+        self.results: str = str(self)
+
         self.train_loader, self.test_loader, self.total_train, self.total_test = load_train_test(batch_size)
         self.train_losses: List[float] = list()
         self.test_losses: List[float] = list()
@@ -120,7 +121,7 @@ class Trainer:
         plt.title('Results')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
-        plt.savefig(f'{RESULTS_FOLDER}/epoch_error_graph_{self}_epoch_{epoch}.png')
+        plt.savefig(f'{self.results}/epoch_error_graph_{self}_epoch_{epoch}.png')
         if PLOT_ALL:
             plt.show()
 
@@ -159,7 +160,7 @@ class Trainer:
                     n_vis = min(VISUALIZE_IMAGE_NUM, data.size(0))
                     pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(pairs.cpu(),
-                               f'{RESULTS_FOLDER}/{PREFIX}bpe_{BATCHES_PER_EPOCH}_{self}_epoch_{epoch}.png', nrow=n_vis)
+                               f'{self.results}/{PREFIX}bpe_{BATCHES_PER_EPOCH}_{self}_epoch_{epoch}.png', nrow=n_vis)
                     self.plot_train_and_test_losses(epoch)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
@@ -174,15 +175,16 @@ class Trainer:
 @timing
 def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
     assert 1 <= half_depth <= 6, "Bad number of layers. Input size is reduced by 2**layers"
-    Path(RESULTS_FOLDER).mkdir(exist_ok=True)
     device = torch.device("cuda" if GPU else "cpu")
     trainer = Trainer(device, epochs, batch_size, half_depth, loss)
+    Path(trainer.results).mkdir(exist_ok=True)
 
     for epoch in range(0, trainer.epochs):
         trainer.train(epoch)
         trainer.test_epoch(epoch)
 
     trainer.plot_train_and_test_losses()
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Trains and tests a autoencoder.')
@@ -192,6 +194,7 @@ def get_args():
     parser.add_argument('-l', '--loss', type=str, default='l1')
 
     return parser.parse_args()
+
 
 def main():
     args = get_args()
