@@ -18,7 +18,7 @@ def tune_loss_type():
         for _ in tqdm.tqdm(pool.map(loss_partial, loss_list), total=len(loss_list)):
             pass
 
-def tune_loss_type():
+def tune_epoch_type():
     epochs_list = [10, 40, 250]
     with Pool(7) as pool:
             for _ in tqdm.tqdm(pool.map(epochs_partial, epochs_list), total=len(epochs_list)):
@@ -26,8 +26,8 @@ def tune_loss_type():
 
 def main():
     tune_batch_size()
-    tune_hyper_param()
     tune_loss_type()
+    tune_epoch_type()
 
 if __name__ == "__main__":
     main()
