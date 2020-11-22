@@ -1,6 +1,6 @@
 """Seperate file for hyper-tuned functions because of multiprocessing limitation
 """
-from trainer import run_trainer
+from train import run_trainer
 
 
 def batch_partial(batch_size):
