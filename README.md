@@ -1,2 +1,2 @@
-# auto-encoder
+# autoencoder
 train.py
