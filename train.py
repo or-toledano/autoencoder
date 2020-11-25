@@ -12,12 +12,9 @@ from timewrap import timing
 from pathlib import Path
 import argparse
 
-BATCHES_PER_EPOCH = 40  # TODO: for GPU, please increase so batch_size*BATCHES_PER_EPOCH ~= 200,000
 PLOT_ALL = True
 PRINT_ITER = 10
 PREFIX = f''
-
-# Less likely you would need to change these:
 
 IMG_DIM = 128
 LATENT_DIM = 256
@@ -33,15 +30,14 @@ GPU = torch.cuda.is_available()
 
 
 def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int, int]:
-    global BATCHES_PER_EPOCH
     data = datasets.ImageFolder(IMG_FOLDER, transform=transforms.Compose([transforms.CenterCrop((128, 128)),
                                                                           transforms.ToTensor()]))
     n_data = len(data)
-    BATCHES_PER_EPOCH = int(np.floor(n_data / batch_size))
+    batches_per_epoch = int(np.floor(n_data / batch_size))
     indices = list(range(n_data))
     np.random.shuffle(indices)
-    indices = indices[:batch_size * BATCHES_PER_EPOCH]
-    split = int(batch_size * np.floor(TEST_RATIO * BATCHES_PER_EPOCH))
+    indices = indices[:batch_size * batches_per_epoch]
+    split = int(batch_size * np.floor(TEST_RATIO * batches_per_epoch))
 
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
@@ -200,16 +196,6 @@ def get_args():
 def main():
     args = get_args()
     run_trainer(epochs=args.epochs, batch_size=args.batch_size, half_depth=args.half_depth, loss=args.loss)
-
-    # loss_list = ['l1', 'l2']
-    # epochs_list = [10, 100, 400]
-    # half_depth_list = [2, 3, 4, 5]
-    # batch_size_list = [10, 100, 1000, 10000]
-    # for e in epochs_list:
-    #     for l in loss_list:
-    #         for b in batch_size_list:
-    #             for d in half_depth_list:
-    #                 run_trainer(epochs=e, batch_size=b, half_depth=d, loss=l)
 
 
 if __name__ == "__main__":
