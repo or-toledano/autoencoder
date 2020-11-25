@@ -186,7 +186,7 @@ def get_args():
     parser.add_argument('-bs', '--batch_size', type=int, default=144)
     parser.add_argument('-e', '--epochs', type=int, default=10)
     parser.add_argument('-hd', '--half_depth', type=int, default=5)
-    parser.add_argument('-l', '--loss', type=str, default='l1')
+    parser.add_argument('-l', '--loss', type=str, default='l2')
 
     return parser.parse_args()
 
