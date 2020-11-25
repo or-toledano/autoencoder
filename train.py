@@ -8,7 +8,6 @@ from torchvision.utils import save_image
 from typing import List, Tuple
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets, transforms
-from timewrap import timing
 from pathlib import Path
 import argparse
 
@@ -170,7 +169,6 @@ class Trainer:
         print(f'***** Epoch {epoch} average test loss is {test_loss:.5f}')
 
 
-@timing
 def run_trainer(epochs=2, batch_size=144, half_depth=5, loss='l2'):
     assert 1 <= half_depth <= 6, "Bad number of layers. Input size is reduced by 2**layers"
     device = torch.device("cuda" if GPU else "cpu")
