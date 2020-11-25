@@ -157,7 +157,7 @@ class Trainer:
                     n_vis = min(VISUALIZE_IMAGE_NUM, data.size(0))
                     pairs = torch.cat([data[:n_vis], recon.view(-1, CHANNELS, IMG_DIM, IMG_DIM)[:n_vis]])
                     save_image(pairs.cpu(),
-                               f'{self.results}/{PREFIX}bpe_{BATCHES_PER_EPOCH}_{self}_epoch_{epoch}.png', nrow=n_vis)
+                               f'{self.results}/{PREFIX}_{self}_epoch_{epoch}.png', nrow=n_vis)
                     self.plot_train_and_test_losses(epoch)
                 if i % PRINT_ITER == 0:
                     print(f'Test epoch {epoch} {i * len(data)}/{self.total_test} '
