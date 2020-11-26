@@ -1,3 +1,3 @@
 # autoencoder
 train.py
-![Demo](demo.jpg "Reconstruction")
+![](./demo.jpg "Reconstruction")
