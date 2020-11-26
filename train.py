@@ -19,7 +19,7 @@ IMG_DIM = 128
 LATENT_DIM = 256
 TRAIN_RATIO = .95
 TEST_RATIO = .05
-IMG_FOLDER = '/specific/netapp5_3/rent_public/dcor-01-2021/ronmokady/workshop21/team3/CelebA'
+IMG_FOLDER = 'CelebA'
 VISUALIZE_IMAGE_NUM = 16
 CHANNELS = 3
 
