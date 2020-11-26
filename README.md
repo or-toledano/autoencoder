@@ -1,3 +1,3 @@
 # autoencoder
 train.py
-![Demo](demo.jpg?raw=true "Reconstruction")
+![Demo](demo.jpg "Reconstruction")
