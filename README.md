@@ -1,3 +1,5 @@
 # autoencoder
-train.py
+code in train.py
+
+
 ![Demo](./demo.png "Reconstruction")
