@@ -40,9 +40,9 @@ def load_train_test(batch_size) -> Tuple[torch.utils.data.DataLoader, torch.util
 
     train_idx, test_idx = indices[split:], indices[:split]
     train_sampler, test_sampler = SubsetRandomSampler(train_idx), SubsetRandomSampler(test_idx)
-    train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=GPU,
+    train_loader = torch.utils.data.DataLoader(data, sampler=train_sampler, batch_size=batch_size, num_workers=2,
                                                pin_memory=GPU)
-    test_loader = torch.utils.data.DataLoader(data, sampler=test_sampler, batch_size=batch_size, num_workers=GPU,
+    test_loader = torch.utils.data.DataLoader(data, sampler=test_sampler, batch_size=batch_size, num_workers=2,
                                               pin_memory=GPU)
     return train_loader, test_loader, len(train_idx), len(test_idx)
 
